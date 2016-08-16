@@ -12,13 +12,16 @@ import java.util.Map;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.mockito.Matchers.*;
+import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.verify;
 
 public class DockerExtensionTest {
 
-    private DockerClientAdapter dockerClient = Mockito.mock(DockerClientAdapter.class);
+    private DockerClientAdapter dockerClient = mock(DockerClientAdapter.class);
 
-    private DockerExtension dockerExtension = new DockerExtension(dockerClient);
+    private PortListener portListener = mock(PortListener.class);
+
+    private DockerExtension dockerExtension = new DockerExtension(dockerClient, portListener);
 
     @Nested
     class BeforeAllTestsShould {
@@ -45,10 +48,24 @@ public class DockerExtensionTest {
             ArgumentCaptor<Map> mapArgumentCaptor = ArgumentCaptor.forClass(Map.class);
             verify(dockerClient).startContainer(eq("wantedImage"),
                     mapArgumentCaptor.<String, String>capture(), any(PortBinding[].class));
-            Map<String,String> environment = mapArgumentCaptor.getValue();
-            assertEquals(1,environment.size());
+            Map<String, String> environment = mapArgumentCaptor.getValue();
+            assertEquals(1, environment.size());
             assertTrue(environment.containsKey("toTest"));
-            assertEquals("myValue",environment.get("toTest"));
+            assertEquals("myValue", environment.get("toTest"));
+        }
+
+        @Test
+        public void waitForPortToBeOpened() throws Exception {
+            ContainerExtensionContext context = new FakeContainerExtensionContext(OnePortTest.class);
+            dockerExtension.beforeAll(context);
+            verify(portListener).waitForPortsToBeOpened(8801);
+        }
+
+        @Test
+        public void waitForMultiplePortsToBeOpened() throws Exception {
+            ContainerExtensionContext context = new FakeContainerExtensionContext(MultiplePortTest.class);
+            dockerExtension.beforeAll(context);
+            verify(portListener).waitForPortsToBeOpened(8801, 9901);
         }
     }
 

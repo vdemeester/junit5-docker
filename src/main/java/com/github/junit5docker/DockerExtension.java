@@ -5,19 +5,23 @@ import org.junit.jupiter.api.extension.BeforeAllCallback;
 import org.junit.jupiter.api.extension.ContainerExtensionContext;
 
 import java.util.HashMap;
+import java.util.stream.Stream;
 
 public class DockerExtension implements BeforeAllCallback, AfterAllCallback {
 
     private final DockerClientAdapter dockerClient;
 
+    private PortListener portListener;
+
     private String containerID;
 
     public DockerExtension() {
-        this(new DefaultDockerClient());
+        this(new DefaultDockerClient(), new SocketPortListener());
     }
 
-    DockerExtension(DockerClientAdapter dockerClient) {
+    DockerExtension(DockerClientAdapter dockerClient, PortListener portListener) {
         this.dockerClient = dockerClient;
+        this.portListener = portListener;
     }
 
     @Override
@@ -27,6 +31,17 @@ public class DockerExtension implements BeforeAllCallback, AfterAllCallback {
         HashMap<String, String> environmentMap = createEnvironmentMap(dockerAnnotation);
         String imageReference = findImageName(dockerAnnotation);
         containerID = dockerClient.startContainer(imageReference, environmentMap, portBindings);
+        waitForPortsToBeOpened(portBindings);
+    }
+
+    @Override
+    public void afterAll(ContainerExtensionContext containerExtensionContext) throws Exception {
+        dockerClient.stopAndRemoveContainer(containerID);
+    }
+
+    private void waitForPortsToBeOpened(PortBinding[] portBindings) throws InterruptedException {
+        int[] exposedPorts = Stream.of(portBindings).mapToInt(portBinding -> portBinding.exposed).toArray();
+        portListener.waitForPortsToBeOpened(exposedPorts);
     }
 
     private Docker findDockerAnnotation(ContainerExtensionContext containerExtensionContext) {
@@ -55,10 +70,5 @@ public class DockerExtension implements BeforeAllCallback, AfterAllCallback {
             portBindings[i] = new PortBinding(port.exposed(), port.inner());
         }
         return portBindings;
-    }
-
-    @Override
-    public void afterAll(ContainerExtensionContext containerExtensionContext) throws Exception {
-        dockerClient.stopAndRemoveContainer(containerID);
     }
 }
